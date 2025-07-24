@@ -6,16 +6,17 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 // Middleware
-app.use(cors({
-    origin: [
-        'http://localhost:5173', // আপনার লোকাল ফ্রন্টএন্ডের URL
-        'https://your-frontend-app-name.vercel.app', // আপনার প্রোডাকশন ফ্রন্টএন্ডের URL
-        'https://another-frontend-url.com' // প্রয়োজনে আরও URL যোগ করুন
-    ],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // OPTIONS মেথড যোগ করা ভালো
-    allowedHeaders: ['Content-Type', 'Authorization'], // Authorization হেডারটি অবশ্যই allow করতে হবে
-    credentials: true,
-}));
+// const corsOptions = {
+//     origin: [
+//         'http://localhost:5173', // আপনার লোকাল ফ্রন্ট-এন্ডের URL (ঠিক আছে)
+//         'https://bdhubshoe.web.app' // <<<<< এই লাইনটি পরিবর্তন করুন
+//     ],
+//     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+//     allowedHeaders: ['Content-Type', 'Authorization'],
+//     credentials: true,
+// };
+
+app.use(cors());
 app.use(express.json());
 
 // IMPROVED: Check for essential environment variables on startup
@@ -65,7 +66,6 @@ async function run() {
       console.log('Request Path:', req.path);
       console.log('Full Headers:', JSON.stringify(req.headers, null, 2));
       const authHeader = req.headers.authorization;
-      console.log('1. Authorization Header Value:', authHeader);
 
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         console.error('Error: Authorization header is missing or does not start with "Bearer ".');
@@ -74,10 +74,8 @@ async function run() {
       }
 
       const token = authHeader.split(' ')[1];
-      console.log('2. Token extracted for verification:', token);
-      console.log('3. Type of token:', typeof token);
       // =================== VERCEL DEBUGGING LOGS END ===================
-
+      console.log(process.env.ACCESS_TOKEN_SECRET, 'jwt seccret');
       // CHANGED: Verifying with the correct secret variable
       jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
         if (err) {
@@ -146,6 +144,41 @@ async function run() {
       res.send(result)
     })
 
+    //Search Product 
+    app.get('/products/search', async (req, res) => {
+      const { q } = req.query;
+      if (!q) {
+        return res.send([]); // Query না থাকলে খালি অ্যারে পাঠানো হবে
+      }
+      const products = await productCollection.find().toArray()
+      const searchTerm = q.toLowerCase();
+
+      const filteredProducts = products.filter(product =>
+        product.name.toLowerCase().includes(searchTerm)
+      );
+
+      res.send(filteredProducts);
+    });
+
+    // API Endpoint for search suggestions (by name only)
+    app.get('/products/suggestions', async (req, res) => {
+      const { q } = req.query;
+      console.log(q);
+      const products = await productCollection.find().toArray()
+      if (!q) {
+        return res.json([]);
+      }
+
+      const searchTerm = q.toLowerCase();
+
+      const suggestedProducts = products
+        .filter(product => product.name.toLowerCase().startsWith(searchTerm))
+        .map(product => product.name) // শুধু নামগুলো পাঠানো হচ্ছে
+        .slice(0, 10) ; // সর্বোচ্চ ১০টি সাজেশন পাঠানো হবে
+
+      res.json(suggestedProducts);
+    });
+
     // --- User Routes ---
     app.post('/user', async (req, res) => {
       const user = req.body;
@@ -175,7 +208,7 @@ async function run() {
     });
 
     // --- Admin-Only User Management Routes ---
-    app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
+    app.get('/users', async (req, res) => {
       const users = await userCollection.find().toArray();
       res.send(users);
     });
@@ -254,3 +287,4 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
   console.log(`bdHub server started on port ${port}`);
 });
+
